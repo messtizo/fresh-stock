@@ -40,19 +40,43 @@ def load_cars():
 
 def load_user(username, password):
     client = db_client()
+
     if not client:
+        st.error("ДИАГНОСТИКА: Supabase не подключён. Проверьте SUPABASE_URL и SUPABASE_KEY.")
         return None
+
     try:
-        rows = client.table("employees").select("*").eq("username", username).eq("active", True).limit(1).execute().data
+        rows = (
+            client.table("employees")
+            .select("*")
+            .eq("username", username)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+            .data
+        )
+
         if not rows:
+            st.error("ДИАГНОСТИКА: Пользователь не найден или active не равен true. Возможно, Streamlit подключён к другой базе.")
             return None
+
         user = rows[0]
         digest = hashlib.sha256(password.encode()).hexdigest()
-        if hmac.compare_digest(str(user.get("password_hash", "")), digest):
+        saved_hash = str(user.get("password_hash", ""))
+
+        if hmac.compare_digest(saved_hash, digest):
             return user
-    except Exception:
+
+        st.error(
+            f"ДИАГНОСТИКА: Пользователь найден, но хеш пароля не совпадает. "
+            f"Длина хеша в базе: {len(saved_hash)}."
+        )
         return None
-    return None
+
+    except Exception as e:
+        st.error(f"ДИАГНОСТИКА: Ошибка обращения к Supabase: {type(e).__name__}: {e}")
+        return None
+
 
 def record_event(username, mode, points, detail=""):
     client = db_client()
