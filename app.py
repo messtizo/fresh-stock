@@ -172,11 +172,33 @@ with st.sidebar:
 st.markdown('<div class="fresh-top"><div class="fresh-red">FRESH AUTO · КРАСНОДАР</div><h1 style="margin:.3rem 0">FRESH STOCK</h1><div>Академия склада · учим ассортимент, чтобы увереннее подбирать автомобили</div></div>', unsafe_allow_html=True)
 
 if not live or cars.empty:
-    st.warning("В базе пока нет автомобилей. Руководителю нужно запустить первый импорт через GitHub Actions или вручную выполнить sync_inventory.py. Приложение не подменяет склад демонстрационными машинами.")
+
+    st.warning(
+        "В базе пока нет автомобилей. "
+        "Сначала необходимо выполнить импорт склада Fresh."
+    )
+
     if is_admin:
         st.markdown("**Склад:** " + BRANCH)
-        st.markdown("После первой синхронизации здесь появятся карточки, фотографии, цены и характеристики.")
-    st.stop()
+
+    st.markdown(
+        "После синхронизации здесь появятся карточки, "
+        "фотографии, цены и характеристики."
+    )
+
+    car_pages = [
+        "Каталог склада",
+        "Флеш-карточки",
+        "Викторина",
+        "Угадай цену",
+        "Запрос клиента",
+        "Сравнение",
+        "Экзамен"
+    ]
+
+    if page in car_pages:
+        st.info("Этот раздел станет доступен после загрузки автомобилей.")
+        st.stop()
 
 # Normalize numeric columns
 for col in ["price","year","mileage","power"]:
