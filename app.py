@@ -333,73 +333,162 @@ elif page == "Флеш-карточки":
     st.caption(f"Карточка {idx + 1} из {len(cars)}")
 
 
+
 elif page == "Викторина":
-    st.subheader("Викторина по автомобилю")
+    st.subheader("Викторина по автомобилям")
+    st.caption("Закрепление знаний · Блоки по 20 автомобилей")
 
-    if "quiz_car" not in st.session_state:
-        st.session_state.quiz_car = random.randrange(len(cars))
+    BLOCK_SIZE = min(20, len(cars))
 
-    car = cars.iloc[st.session_state.quiz_car].to_dict()
+    # Создаём первый блок
+    if "quiz_deck" not in st.session_state:
+        st.session_state.quiz_deck = list(range(len(cars)))
+        random.shuffle(st.session_state.quiz_deck)
+        st.session_state.quiz_block = 1
+        st.session_state.quiz_queue = []
+        st.session_state.quiz_mastered = set()
+        st.session_state.quiz_attempt = 0
 
-    # Показываем только фотографию и название
-    show_car_card(
-        car,
-        show_specs=False,
-        show_price=False
-    )
+    # Функция подготовки следующего блока
+    def start_next_quiz_block():
+        deck = st.session_state.quiz_deck
 
-    fields = [
-        x for x in ["year", "transmission", "fuel", "drive", "power"]
-        if x in cars and cars[x].notna().any()
-    ]
+        if len(deck) < BLOCK_SIZE:
+            remaining = list(range(len(cars)))
+            random.shuffle(remaining)
 
-    field = st.selectbox(
-        "Что определить?",
-        fields,
-        format_func=lambda x: {
-            "year": "Год выпуска",
-            "transmission": "Коробка передач",
-            "fuel": "Топливо",
-            "drive": "Привод",
-            "power": "Мощность"
-        }[x]
-    )
+            for idx in remaining:
+                if idx not in deck:
+                    deck.append(idx)
 
-    options = cars[field].dropna().unique().tolist()
+        block = deck[:BLOCK_SIZE]
+        st.session_state.quiz_deck = deck[BLOCK_SIZE:]
 
-    # Годы сортируем по возрастанию
-    if field == "year":
-        options = sorted(options, key=lambda x: int(x))
-    else:
-        options = sorted(options, key=lambda x: str(x))
+        st.session_state.quiz_queue = block
+        st.session_state.quiz_mastered = set()
+        st.session_state.quiz_block += 1
+        st.session_state.quiz_attempt = 0
 
-    if len(options) > 1:
-        choice = st.radio(
-            "Выберите ответ",
-            options,
-            horizontal=True
+    # Автоматически запускаем первый блок
+    if not st.session_state.quiz_queue and "quiz_block" not in st.session_state:
+        start_next_quiz_block()
+
+    # Если блок пройден
+    if len(st.session_state.quiz_queue) == 0:
+        st.success(
+            f"Блок №{st.session_state.quiz_block} полностью пройден!"
         )
 
-        if st.button("Проверить", type="primary"):
-            ok = str(choice) == str(car[field])
+        st.markdown(
+            f"### Выучено автомобилей: {BLOCK_SIZE} из {BLOCK_SIZE}"
+        )
 
-            if ok:
-                st.success("Верно · +10 баллов")
-            else:
-                st.error(f"Правильный ответ: {car[field]}")
+        st.progress(1.0)
 
-            record_event(
-                user["username"],
-                "Викторина",
-                10 if ok else 0,
-                f"{car_title(car)} · {field}"
-            )
+        st.balloons()
 
-            st.session_state.quiz_car = random.randrange(len(cars))
+        if st.button("Начать следующий блок", type="primary"):
+            start_next_quiz_block()
             st.rerun()
 
     else:
-        st.info("Недостаточно разных значений для этого вопроса.")
+        queue = st.session_state.quiz_queue
+        mastered = len(st.session_state.quiz_mastered)
+
+        st.markdown(f"### Блок №{st.session_state.quiz_block}")
+
+        st.progress(
+            mastered / BLOCK_SIZE,
+            text=f"Выучено автомобилей: {mastered} из {BLOCK_SIZE}"
+        )
+
+        st.info(
+            f"Осталось выучить: {BLOCK_SIZE - mastered}. "
+            f"Ошибочные ответы возвращают автомобиль в очередь."
+        )
+
+        # Показываем текущий автомобиль
+        car_idx = queue[0]
+        car = cars.iloc[car_idx].to_dict()
+
+        show_car_card(
+            car,
+            show_specs=False,
+            show_price=False
+        )
+
+        fields = [
+            x for x in ["year", "transmission", "fuel", "drive", "power"]
+            if x in cars.columns and cars[x].notna().any()
+            and pd.notna(car.get(x))
+        ]
+
+        field = st.selectbox(
+            "Что определить?",
+            fields,
+            format_func=lambda x: {
+                "year": "Год выпуска",
+                "transmission": "Коробка передач",
+                "fuel": "Топливо",
+                "drive": "Привод",
+                "power": "Мощность"
+            }[x],
+            key=f"quiz_field_{st.session_state.quiz_block}_{car_idx}_{st.session_state.quiz_attempt}"
+        )
+
+        options = cars[field].dropna().unique().tolist()
+
+        if field == "year":
+            options = sorted(options, key=lambda x: int(x))
+        else:
+            options = sorted(options, key=lambda x: str(x).lower())
+
+        if len(options) > 1:
+            choice = st.radio(
+                "Выберите ответ",
+                options,
+                horizontal=True,
+                key=f"quiz_answer_{st.session_state.quiz_block}_{car_idx}_{st.session_state.quiz_attempt}_{field}"
+            )
+
+            if st.button("Проверить", type="primary"):
+                ok = str(choice) == str(car[field])
+
+                if ok:
+                    st.success("Верно! Автомобиль выучен · +10 баллов")
+
+                    st.session_state.quiz_mastered.add(car_idx)
+                    st.session_state.quiz_queue.pop(0)
+
+                    record_event(
+                        user["username"],
+                        "Викторина",
+                        10,
+                        f"Блок {st.session_state.quiz_block} · {car_title(car)} · {field}"
+                    )
+
+                else:
+                    st.error(
+                        f"Неверно. Правильный ответ: {car[field]}"
+                    )
+
+                    # Ошибочную машину переносим в конец очереди
+                    st.session_state.quiz_queue.append(
+                        st.session_state.quiz_queue.pop(0)
+                    )
+
+                    record_event(
+                        user["username"],
+                        "Викторина",
+                        0,
+                        f"Ошибка · Блок {st.session_state.quiz_block} · {car_title(car)} · {field}"
+                    )
+
+                st.session_state.quiz_attempt += 1
+                st.rerun()
+
+        else:
+            st.warning("Недостаточно разных значений для этого вопроса.")
 
 
 elif page == "Угадай цену":
