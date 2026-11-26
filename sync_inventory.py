@@ -52,6 +52,13 @@ def candidate_blocks(soup):
                 node = node.parent
 
             txt = clean(node.get_text(" ", strip=True))
+             bad_words = [
+            "купить", "продать", "кредит", "сервис",
+            "франшиза", "контакты", "журнал", "qr"
+        ]
+
+        if any(word in txt.lower() for word in bad_words):
+            continue
 
             has_price = bool(re.search(
                 r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
@@ -77,7 +84,7 @@ def candidate_blocks(soup):
 
 def parse_card(url, node, text):
     price_match = re.search(
-        r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
+        r"(?<!\d)(?:[1-9]\d{0,2}(?:[ \u00a0]\d{3}){1,2}|[1-9]\d{4,8})\s*₽",
         text
     )
     price = number(price_match.group(0)) if price_match else None
