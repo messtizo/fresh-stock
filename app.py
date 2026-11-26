@@ -94,7 +94,7 @@ def money(v):
     except Exception: return "Цена не указана"
 
 
-def show_car_card(car, compact=False, show_specs=True):
+def show_car_card(car, compact=False, show_specs=True, show_price=True):
     brand = str(car.get("brand") or "").strip()
     model = str(car.get("model") or "").strip()
     title = f"{brand} {model}".strip()
@@ -114,7 +114,8 @@ def show_car_card(car, compact=False, show_specs=True):
         year_text = str(int(year)) if pd.notna(year) else ""
 
         st.markdown(f"**{title}**")
-        st.markdown(f"### {money(car.get('price'))}")
+        if show_price:
+            st.markdown(f"### {money(car.get('price'))}")
 
         if show_specs:
             specs = [
@@ -331,22 +332,75 @@ elif page == "Флеш-карточки":
 
     st.caption(f"Карточка {idx + 1} из {len(cars)}")
 
+
 elif page == "Викторина":
     st.subheader("Викторина по автомобилю")
-    if "quiz_car" not in st.session_state: st.session_state.quiz_car = random.randrange(len(cars))
+
+    if "quiz_car" not in st.session_state:
+        st.session_state.quiz_car = random.randrange(len(cars))
+
     car = cars.iloc[st.session_state.quiz_car].to_dict()
-    show_car_card({**car,"image_url":car.get("image_url")})
-    fields = [x for x in ["year","transmission","fuel","drive","power"] if x in cars and cars[x].notna().any()]
-    field = st.selectbox("Что определить?", fields, format_func=lambda x:{"year":"Год выпуска","transmission":"Коробка передач","fuel":"Топливо","drive":"Привод","power":"Мощность"}[x])
+
+    # Показываем только фотографию и название
+    show_car_card(
+        car,
+        show_specs=False,
+        show_price=False
+    )
+
+    fields = [
+        x for x in ["year", "transmission", "fuel", "drive", "power"]
+        if x in cars and cars[x].notna().any()
+    ]
+
+    field = st.selectbox(
+        "Что определить?",
+        fields,
+        format_func=lambda x: {
+            "year": "Год выпуска",
+            "transmission": "Коробка передач",
+            "fuel": "Топливо",
+            "drive": "Привод",
+            "power": "Мощность"
+        }[x]
+    )
+
     options = cars[field].dropna().unique().tolist()
-    if len(options)>1:
-        choice = st.radio("Выберите ответ", options, horizontal=True)
-        if st.button("Проверить",type="primary"):
-            ok = str(choice)==str(car[field])
-            st.success("Верно · +10 баллов") if ok else st.error(f"Правильный ответ: {car[field]}")
-            record_event(user["username"],"Викторина",10 if ok else 0, f"{car_title(car)} · {field}")
-            st.session_state.quiz_car=random.randrange(len(cars)); st.rerun()
-    else: st.info("Недостаточно разных значений для этого вопроса.")
+
+    # Годы сортируем по возрастанию
+    if field == "year":
+        options = sorted(options, key=lambda x: int(x))
+    else:
+        options = sorted(options, key=lambda x: str(x))
+
+    if len(options) > 1:
+        choice = st.radio(
+            "Выберите ответ",
+            options,
+            horizontal=True
+        )
+
+        if st.button("Проверить", type="primary"):
+            ok = str(choice) == str(car[field])
+
+            if ok:
+                st.success("Верно · +10 баллов")
+            else:
+                st.error(f"Правильный ответ: {car[field]}")
+
+            record_event(
+                user["username"],
+                "Викторина",
+                10 if ok else 0,
+                f"{car_title(car)} · {field}"
+            )
+
+            st.session_state.quiz_car = random.randrange(len(cars))
+            st.rerun()
+
+    else:
+        st.info("Недостаточно разных значений для этого вопроса.")
+
 
 elif page == "Угадай цену":
     st.subheader("Угадай цену")
