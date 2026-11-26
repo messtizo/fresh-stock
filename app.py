@@ -770,7 +770,7 @@ elif page == "Кабинет руководителя":
                             client.table("employees").insert({
                                 "username": new_username,
                                 "full_name": full_name,
-                                "role": "employee",
+                                "role": "manager",
                                 "active": True,
                                 "password_hash": password_hash
                             }).execute()
