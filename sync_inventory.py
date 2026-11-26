@@ -74,42 +74,84 @@ def candidate_blocks(soup):
 
     return found
 
+
 def parse_card(url, node, text):
-    # Require an identifiable price and model/year text; fields not present remain NULL.
     price_match = re.search(
-    r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
-    text
-)
-price = number(price_match.group(0)) if price_match else None
-    year_match=re.search(r"\b(19\d{2}|20\d{2})\b",text)
-    year=int(year_match.group(1)) if year_match else None
-    title=clean(node.get_text(" ",strip=True))
-    title=title[:160]
-    # Prefer a card image; keep source URL, don't download or rehost without permission.
-    img=node.select_one("img")
-    image_url=None
+        r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
+        text
+    )
+    price = number(price_match.group(0)) if price_match else None
+
+    year_match = re.search(r"\b(19\d{2}|20\d{2})\b", text)
+    year = int(year_match.group(1)) if year_match else None
+
+    title = clean(node.get_text(" ", strip=True))[:160]
+
+    img = node.select_one("img")
+    image_url = None
+
     if img:
-        image_url=img.get("src") or img.get("data-src") or img.get("data-lazy-src")
-        if image_url: image_url=urljoin(BASE,image_url)
-        if not image_url:
-            srcset=img.get("srcset")
-            if srcset: image_url=urljoin(BASE,srcset.split(",")[0].strip().split(" ")[0])
-    # Parse typical listing spec line
-    spec=text
-    mileage=number(re.search(r"([\d\s\u00a0]+)\s*км",spec).group(1)) if re.search(r"([\d\s\u00a0]+)\s*км",spec) else None
-    power=number(re.search(r"\((\d+)\s*л\.с\.\)",spec).group(1)) if re.search(r"\((\d+)\s*л\.с\.\)",spec) else None
-    fuel=next((x for x in ["Бензин","Дизель","Гибридный","Электро"] if x.lower() in text.lower()),None)
-    transmission=next((x for x in ["CVT","AMT","AT","MT","АКПП","МКПП"] if re.search(r"\b"+re.escape(x)+r"\b",text,re.I)),None)
-    drive="Полный" if "Полный" in text or "4WD" in text else ("Задний" if "Задний" in text else ("Передний" if "Передний" in text else None))
-    # Extract title's first words before year/price as a best-effort display title.
-    title_match=re.search(r"^(.{2,70}?)(?:19\d{2}|20\d{2})",text)
-    title=clean(title_match.group(1)) if title_match else title
-    digest=hashlib.sha256(url.encode()).hexdigest()[:24]
+        image_url = (
+            img.get("src")
+            or img.get("data-src")
+            or img.get("data-lazy-src")
+        )
+
+        if not image_url and img.get("srcset"):
+            image_url = img.get("srcset").split(",")[0].strip().split(" ")[0]
+
+        if image_url:
+            image_url = urljoin(BASE, image_url)
+
+    mileage_match = re.search(r"([\d\s\u00a0]+)\s*км", text, re.I)
+    mileage = number(mileage_match.group(1)) if mileage_match else None
+
+    power_match = re.search(r"\((\d+)\s*л\.с\.\)", text)
+    power = number(power_match.group(1)) if power_match else None
+
+    fuel = next(
+        (x for x in ["Бензин", "Дизель", "Гибридный", "Электро"]
+         if x.lower() in text.lower()),
+        None
+    )
+
+    transmission = next(
+        (x for x in ["CVT", "AMT", "AT", "MT", "АКПП", "МКПП"]
+         if re.search(r"\b" + re.escape(x) + r"\b", text, re.I)),
+        None
+    )
+
+    drive = (
+        "Полный" if "Полный" in text or "4WD" in text
+        else "Задний" if "Задний" in text
+        else "Передний" if "Передний" in text
+        else None
+    )
+
+    title_match = re.search(r"^(.{2,70}?)(?:19\d{2}|20\d{2})", text)
+    if title_match:
+        title = clean(title_match.group(1))
+
+    digest = hashlib.sha256(url.encode()).hexdigest()[:24]
+
     return {
-      "external_id":digest,"url":url,"title":title,"brand":None,"model":title,
-      "year":year,"price":price,"mileage":mileage,"engine":None,
-      "transmission":transmission,"power":power,"fuel":fuel,"drive":drive,
-      "body":None,"image_url":image_url,"branch":BRANCH,"raw_text":text[:1500]
+        "external_id": digest,
+        "url": url,
+        "title": title,
+        "brand": None,
+        "model": title,
+        "year": year,
+        "price": price,
+        "mileage": mileage,
+        "engine": None,
+        "transmission": transmission,
+        "power": power,
+        "fuel": fuel,
+        "drive": drive,
+        "body": None,
+        "image_url": image_url,
+        "branch": BRANCH,
+        "raw_text": text[:1500]
     }
 
 def main():
