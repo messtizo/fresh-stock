@@ -113,7 +113,7 @@ def show_car_card(car, compact=False, show_specs=True):
         year = car.get("year")
         year_text = str(int(year)) if pd.notna(year) else ""
 
-        st.markdown(f"**{title} · {year_text}**")
+        st.markdown(f"**{title}**")
         st.markdown(f"### {money(car.get('price'))}")
 
         if show_specs:
