@@ -450,28 +450,118 @@ elif page == "Сравнение":
 
 elif page == "Экзамен":
     st.subheader("Экзамен отдела продаж")
-    n=st.slider("Количество вопросов",5,min(30,len(cars)*3),min(20,max(5,len(cars))))
-    if st.button("Начать экзамен",type="primary"):
-        st.session_state.exam=[random.randrange(len(cars)) for _ in range(n)]
-        st.session_state.exam_i=0; st.session_state.exam_score=0
+
+    n = st.slider(
+        "Количество вопросов",
+        5,
+        min(30, len(cars) * 3),
+        min(20, max(5, len(cars)))
+    )
+
+    if st.button("Начать экзамен", type="primary"):
+        st.session_state.exam = [
+            random.randrange(len(cars)) for _ in range(n)
+        ]
+        st.session_state.exam_i = 0
+        st.session_state.exam_score = 0
+
     if "exam" in st.session_state:
-        pos=st.session_state.exam_i
-        if pos<len(st.session_state.exam):
-            car=cars.iloc[st.session_state.exam[pos]].to_dict()
-            st.progress(pos/len(st.session_state.exam),text=f"Вопрос {pos+1}/{len(st.session_state.exam)}")
-            show_car_card({**car,"price":None})
-            field=st.selectbox("Укажите характеристику",["year","transmission","fuel","drive","power"],format_func=lambda x:{"year":"Год","transmission":"КПП","fuel":"Топливо","drive":"Привод","power":"Мощность"}[x],key=f"exam_f{pos}")
-            vals=cars[field].dropna().unique().tolist()
-            answer=st.selectbox("Ответ",vals,key=f"exam_a{pos}")
-            if st.button("Ответить",key=f"exam_submit{pos}"):
-                if str(answer)==str(car.get(field)): st.session_state.exam_score+=1
-                st.session_state.exam_i+=1; st.rerun()
+        pos = st.session_state.exam_i
+
+        if pos < len(st.session_state.exam):
+            car = cars.iloc[st.session_state.exam[pos]].to_dict()
+
+            st.progress(
+                pos / len(st.session_state.exam),
+                text=f"Вопрос {pos + 1}/{len(st.session_state.exam)}"
+            )
+
+            show_car_card(
+                car,
+                show_specs=False,
+                show_price=False
+            )
+
+            fields = [
+                "year",
+                "engine",
+                "transmission",
+                "fuel",
+                "drive",
+                "mileage"
+            ]
+
+            field_labels = {
+                "year": "Год выпуска",
+                "engine": "Двигатель",
+                "transmission": "Коробка передач",
+                "fuel": "Топливо",
+                "drive": "Привод",
+                "mileage": "Пробег"
+            }
+
+            available_fields = [
+                field for field in fields
+                if field in cars.columns
+                and cars[field].notna().any()
+                and pd.notna(car.get(field))
+            ]
+
+            field = st.selectbox(
+                "Какую характеристику определить?",
+                available_fields,
+                format_func=lambda x: field_labels[x],
+                key=f"exam_f{pos}"
+            )
+
+            vals = cars[field].dropna().unique().tolist()
+
+            if field == "year":
+                vals = sorted(vals, key=lambda x: int(x))
+            elif field == "mileage":
+                vals = sorted(vals, key=lambda x: float(x))
+            else:
+                vals = sorted(vals, key=lambda x: str(x).lower())
+
+            answer = st.selectbox(
+                "Выберите ответ",
+                vals,
+                key=f"exam_a{pos}"
+            )
+
+            if st.button("Ответить", key=f"exam_submit{pos}"):
+                if str(answer) == str(car.get(field)):
+                    st.session_state.exam_score += 1
+                    st.success("Верно!")
+                else:
+                    st.error(
+                        f"Неверно. Правильный ответ: {car.get(field)}"
+                    )
+
+                st.session_state.exam_i += 1
+                st.rerun()
+
         else:
-            total=len(st.session_state.exam); points=st.session_state.exam_score*10
-            st.success(f"Экзамен завершён: {st.session_state.exam_score}/{total}. Баллы: {points}")
-            record_event(user["username"],"Экзамен",points,f"{st.session_state.exam_score}/{total}")
+            total = len(st.session_state.exam)
+            correct = st.session_state.exam_score
+            points = correct * 10
+
+            st.success(
+                f"Экзамен завершён: {correct}/{total}. Баллы: {points}"
+            )
+
+            record_event(
+                user["username"],
+                "Экзамен",
+                points,
+                f"{correct}/{total}"
+            )
+
             del st.session_state.exam
-            if st.button("Пройти ещё раз"): st.rerun()
+
+            if st.button("Пройти ещё раз"):
+                st.rerun()
+
 
 elif page == "Мой прогресс":
     st.subheader("Моя статистика")
