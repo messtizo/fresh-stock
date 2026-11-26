@@ -34,44 +34,47 @@ def get_soup(url, session):
 def candidate_blocks(soup):
     found = {}
 
+    bad_words = [
+        "купить", "продать", "кредит", "сервис",
+        "франшиза", "контакты", "журнал",
+        "qr", "краснодар +7"
+    ]
+
     for a in soup.select('a[href*="/cars/"]'):
         href = urljoin(BASE, a.get("href", ""))
         path = urlparse(href).path
 
-        # Берём только ссылки на конкретные объявления:
-        # в конце адреса должен быть числовой ID.
         if not re.search(r"/cars/[^/]+-\d+/?$", path):
             continue
 
         node = a
         card = None
 
-        # Ищем ближайший компактный блок с признаками автомобиля.
         for _ in range(8):
             if node.parent:
                 node = node.parent
 
             txt = clean(node.get_text(" ", strip=True))
-             bad_words = [
-            "купить", "продать", "кредит", "сервис",
-            "франшиза", "контакты", "журнал", "qr"
-        ]
+            low = txt.lower()
 
-        if any(word in txt.lower() for word in bad_words):
-            continue
+            if any(word in low for word in bad_words):
+                continue
 
-            has_price = bool(re.search(
-                r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
+            price_match = re.search(
+                r"(?<!\d)(?:[1-9]\d{0,2}(?:[ \u00a0]\d{3}){1,2}|[1-9]\d{4,8})\s*₽",
                 txt
-            ))
+            )
+
             has_year = bool(re.search(r"\b(?:19|20)\d{2}\b", txt))
             has_mileage = bool(re.search(r"\d[\d \u00a0]*\s*км", txt, re.I))
+            has_image = node.select_one("img") is not None
 
             if (
                 40 <= len(txt) <= 700
-                and has_price
+                and price_match
                 and has_year
                 and has_mileage
+                and has_image
             ):
                 card = (node, txt)
                 break
