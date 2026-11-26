@@ -29,7 +29,7 @@ def get_soup(url, session):
     r=session.get(url,timeout=35); r.raise_for_status()
     if "captcha" in r.url.lower() or "captcha" in r.text[:5000].lower():
         raise RuntimeError("Сайт показал CAPTCHA/защиту. Синхронизация остановлена; обход защиты не выполняется.")
-    return BeautifulSoup(r.text,"lxml")
+    return BeautifulSoup(r.text, "html.parser")
 
 def candidate_blocks(soup):
     # Find listing links and climb to a compact card-like parent.
