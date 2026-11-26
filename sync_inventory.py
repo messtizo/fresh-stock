@@ -50,8 +50,11 @@ def candidate_blocks(soup):
 
 def parse_card(url, node, text):
     # Require an identifiable price and model/year text; fields not present remain NULL.
-    price_match=re.search(r"([\d\s\u00a0]+)\s*₽",text)
-    price=number(price_match.group(1)) if price_match else None
+    price_match = re.search(
+    r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
+    text
+)
+price = number(price_match.group(0)) if price_match else None
     year_match=re.search(r"\b(19\d{2}|20\d{2})\b",text)
     year=int(year_match.group(1)) if year_match else None
     title=clean(node.get_text(" ",strip=True))
