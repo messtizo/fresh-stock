@@ -246,22 +246,64 @@ elif page == "Каталог склада":
 
 elif page == "Флеш-карточки":
     st.subheader("Флеш-карточки")
-    if "flash_pos" not in st.session_state: st.session_state.flash_pos = 0
+
+    if "flash_pos" not in st.session_state:
+        st.session_state.flash_pos = 0
+
+    if "flash_show" not in st.session_state:
+        st.session_state.flash_show = False
+
     idx = st.session_state.flash_pos % len(cars)
     car = cars.iloc[idx].to_dict()
+
+    # Фото и основная информация
     show_car_card(car)
-    if st.button("Показать характеристики", type="primary"):
-        st.session_state.flash_show = True
-    if st.session_state.get("flash_show"):
-        st.write({k:car.get(k) for k in ["year","price","mileage","engine","transmission","power","fuel","drive","body"]})
-        a,b = st.columns(2)
-        if a.button("Знаю"):
-            record_event(user["username"],"Карточки",5,car_title(car))
-            st.session_state.flash_pos += 1; st.session_state.flash_show=False; st.rerun()
-        if b.button("Нужно повторить"):
-            record_event(user["username"],"Карточки",0,"Повторить: "+car_title(car))
-            st.session_state.flash_pos += 1; st.session_state.flash_show=False; st.rerun()
-    st.caption(f"Карточка {idx+1} из {len(cars)}")
+
+    st.divider()
+
+    if not st.session_state.flash_show:
+        st.markdown("### Вспомните характеристики автомобиля")
+        st.info("Попробуйте назвать двигатель, коробку передач, мощность и привод.")
+
+        if st.button("Показать характеристики", type="primary"):
+            st.session_state.flash_show = True
+            st.rerun()
+
+    else:
+        st.markdown("### Характеристики автомобиля")
+
+        specs = [
+            ("Год выпуска", car.get("year")),
+            ("Двигатель", car.get("engine")),
+            ("Коробка передач", car.get("transmission")),
+            ("Мощность", f"{car.get('power')} л.с." if car.get("power") else None),
+            ("Топливо", car.get("fuel")),
+            ("Привод", car.get("drive")),
+            ("Пробег", f"{car.get('mileage'):,} км".replace(",", " ") if car.get("mileage") else None),
+        ]
+
+        for label, value in specs:
+            if value is not None and str(value).strip().lower() not in ["", "none", "null"]:
+                st.write(f"**{label}:** {value}")
+
+        st.divider()
+        st.markdown("### Насколько хорошо вы знаете эту машину?")
+
+        a, b = st.columns(2)
+
+        if a.button("Знаю", type="primary", use_container_width=True):
+            record_event(user["username"], "Карточки", 5, car_title(car))
+            st.session_state.flash_pos += 1
+            st.session_state.flash_show = False
+            st.rerun()
+
+        if b.button("Нужно повторить", use_container_width=True):
+            record_event(user["username"], "Карточки", 0, "Повторить: " + car_title(car))
+            st.session_state.flash_pos += 1
+            st.session_state.flash_show = False
+            st.rerun()
+
+    st.caption(f"Карточка {idx + 1} из {len(cars)}")
 
 elif page == "Викторина":
     st.subheader("Викторина по автомобилю")
