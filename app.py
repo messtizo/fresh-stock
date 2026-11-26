@@ -489,7 +489,6 @@ elif page == "Экзамен":
             fields = [
                 "year",
                 "price",
-                "mileage",
                 "engine",
                 "transmission",
                 "fuel",
@@ -498,8 +497,7 @@ elif page == "Экзамен":
 
             labels = {
                 "year": "Год выпуска",
-                "price": "Цена",
-                "mileage": "Пробег, км",
+                "price": "Цена, ₽",
                 "engine": "Двигатель",
                 "transmission": "Коробка передач",
                 "fuel": "Топливо",
@@ -509,7 +507,6 @@ elif page == "Экзамен":
             available_fields = [
                 f for f in fields
                 if f in cars.columns
-                and cars[f].notna().any()
                 and pd.notna(car.get(f))
             ]
 
@@ -521,38 +518,50 @@ elif page == "Экзамен":
             st.markdown("### Укажите характеристики автомобиля")
 
             for field in available_fields:
-                vals = cars[field].dropna().unique().tolist()
-
-                if field in ["year", "price", "mileage"]:
-                    vals = sorted(vals, key=lambda x: float(x))
+                if field in ["year", "price"]:
+                    answers[field] = st.text_input(
+                        labels[field],
+                        key=f"exam_answer_{pos}_{field}",
+                        disabled=st.session_state.exam_checked,
+                        placeholder="Введите число"
+                    )
                 else:
-                    vals = sorted(vals, key=lambda x: str(x).lower())
+                    vals = sorted(
+                        cars[field].dropna().unique().tolist(),
+                        key=lambda x: str(x).lower()
+                    )
 
-                if field == "price":
-                    display = lambda x: money(x)
-                elif field == "mileage":
-                    display = lambda x: f"{int(x):,} км".replace(",", " ")
-                else:
-                    display = lambda x: str(x)
-
-                answers[field] = st.selectbox(
-                    labels[field],
-                    vals,
-                    format_func=display,
-                    key=f"exam_answer_{pos}_{field}",
-                    disabled=st.session_state.exam_checked
-                )
+                    answers[field] = st.selectbox(
+                        labels[field],
+                        vals,
+                        key=f"exam_answer_{pos}_{field}",
+                        disabled=st.session_state.exam_checked
+                    )
 
             if not st.session_state.exam_checked:
                 if st.button("Проверить ответы", type="primary"):
                     results = {}
 
                     for field in available_fields:
-                        correct = str(answers[field]) == str(car.get(field))
+                        answer = answers[field]
+                        right = car.get(field)
+
+                        if field in ["year", "price"]:
+                            try:
+                                answer_num = float(
+                                    str(answer).replace(" ", "").replace(",", "").replace("₽", "")
+                                )
+                                right_num = float(right)
+                                correct = answer_num == right_num
+                            except (ValueError, TypeError):
+                                correct = False
+                        else:
+                            correct = str(answer) == str(right)
+
                         results[field] = {
                             "correct": correct,
-                            "answer": answers[field],
-                            "right": car.get(field)
+                            "answer": answer,
+                            "right": right
                         }
 
                         if correct:
@@ -571,11 +580,8 @@ elif page == "Экзамен":
                     result = results[field]
 
                     if field == "price":
-                        answer_text = money(result["answer"])
+                        answer_text = str(result["answer"])
                         right_text = money(result["right"])
-                    elif field == "mileage":
-                        answer_text = f"{int(result['answer']):,} км".replace(",", " ")
-                        right_text = f"{int(result['right']):,} км".replace(",", " ")
                     else:
                         answer_text = str(result["answer"])
                         right_text = str(result["right"])
