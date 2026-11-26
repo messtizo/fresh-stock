@@ -32,20 +32,46 @@ def get_soup(url, session):
     return BeautifulSoup(r.text, "html.parser")
 
 def candidate_blocks(soup):
-    # Find listing links and climb to a compact card-like parent.
-    found={}
+    found = {}
+
     for a in soup.select('a[href*="/cars/"]'):
-        href=urljoin(BASE,a.get("href",""))
-        if not re.search(r"/cars/[^/?#]+",urlparse(href).path): continue
-        node=a
-        for _ in range(6):
-            if node.parent: node=node.parent
-            txt=clean(node.get_text(" ",strip=True))
-            if len(txt)>45 and len(txt)<1800 and ("₽" in txt or "руб" in txt.lower()):
+        href = urljoin(BASE, a.get("href", ""))
+        path = urlparse(href).path
+
+        # Берём только ссылки на конкретные объявления:
+        # в конце адреса должен быть числовой ID.
+        if not re.search(r"/cars/[^/]+-\d+/?$", path):
+            continue
+
+        node = a
+        card = None
+
+        # Ищем ближайший компактный блок с признаками автомобиля.
+        for _ in range(8):
+            if node.parent:
+                node = node.parent
+
+            txt = clean(node.get_text(" ", strip=True))
+
+            has_price = bool(re.search(
+                r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d{5,9})\s*₽",
+                txt
+            ))
+            has_year = bool(re.search(r"\b(?:19|20)\d{2}\b", txt))
+            has_mileage = bool(re.search(r"\d[\d \u00a0]*\s*км", txt, re.I))
+
+            if (
+                40 <= len(txt) <= 700
+                and has_price
+                and has_year
+                and has_mileage
+            ):
+                card = (node, txt)
                 break
-        txt=clean(node.get_text(" ",strip=True))
-        if href not in found and len(txt)>30:
-            found[href]=(node,txt)
+
+        if card and href not in found:
+            found[href] = card
+
     return found
 
 def parse_card(url, node, text):
