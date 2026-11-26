@@ -643,16 +643,266 @@ elif page == "Мой прогресс":
         st.dataframe(events.sort_values("created_at",ascending=False),use_container_width=True,hide_index=True)
 
 elif page == "Кабинет руководителя":
-    st.subheader("Кабинет руководителя")
-    client=db_client()
-    employees=client.table("employees").select("username,full_name,role,active").execute().data
-    st.markdown("#### Сотрудники")
-    st.dataframe(pd.DataFrame(employees),use_container_width=True,hide_index=True)
-    events=client.table("training_events").select("*").order("created_at",desc=True).limit(500).execute().data
-    if events:
-        df=pd.DataFrame(events)
-        st.markdown("#### Результаты обучения")
-        st.dataframe(df,use_container_width=True,hide_index=True)
-        st.markdown("#### Баллы по режимам")
-        st.dataframe(df.groupby(["username","mode"],as_index=False).points.sum().sort_values("points",ascending=False),use_container_width=True,hide_index=True)
-    st.caption("Создание пользователей и запуск экзамена администратором выполняются через защищённые SQL-команды из README в этой версии.")
+    st.subheader("Панель руководителя")
+    st.caption("FRESH STOCK · Управление командой и обучением")
+
+    client = db_client()
+
+    if not client:
+        st.error("Нет подключения к базе данных Supabase.")
+        st.stop()
+
+    # Загружаем сотрудников
+    employees = (
+        client.table("employees")
+        .select("username,full_name,role,active")
+        .order("full_name")
+        .execute()
+        .data
+    )
+
+    emp_df = pd.DataFrame(employees)
+
+    # Загружаем историю обучения
+    events = (
+        client.table("training_events")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(500)
+        .execute()
+        .data
+    )
+
+    df = pd.DataFrame(events)
+
+    # Основные показатели
+    total_employees = len(emp_df)
+
+    if not emp_df.empty and "active" in emp_df.columns:
+        active_employees = int(
+            emp_df["active"].fillna(False).astype(bool).sum()
+        )
+    else:
+        active_employees = 0
+
+    total_events = len(df)
+
+    if not df.empty and "username" in df.columns:
+        trained_count = df["username"].nunique()
+    else:
+        trained_count = 0
+
+    st.markdown("### Общая статистика")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Всего сотрудников", total_employees)
+    c2.metric("Активных", active_employees)
+    c3.metric("Занимались", trained_count)
+    c4.metric("Записей обучения", total_events)
+
+    st.divider()
+
+    # Вкладки кабинета
+    tab1, tab2, tab3 = st.tabs([
+        "Сотрудники",
+        "Успеваемость",
+        "Рейтинг"
+    ])
+
+    # -------------------------
+    # СОТРУДНИКИ
+    # -------------------------
+    with tab1:
+        st.markdown("### Команда Fresh")
+
+        with st.expander("➕ Добавить нового сотрудника", expanded=False):
+            with st.form("add_employee_form"):
+                full_name = st.text_input("ФИО сотрудника")
+                new_username = st.text_input("Логин")
+                new_password = st.text_input(
+                    "Пароль",
+                    type="password"
+                )
+                confirm_password = st.text_input(
+                    "Повторите пароль",
+                    type="password"
+                )
+
+                create_employee = st.form_submit_button(
+                    "Создать сотрудника",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if create_employee:
+                full_name = full_name.strip()
+                new_username = new_username.strip().lower()
+
+                if not full_name or not new_username or not new_password:
+                    st.error("Заполните все поля.")
+
+                elif len(new_password) < 6:
+                    st.error("Пароль должен содержать минимум 6 символов.")
+
+                elif new_password != confirm_password:
+                    st.error("Пароли не совпадают.")
+
+                else:
+                    try:
+                        existing = (
+                            client.table("employees")
+                            .select("username")
+                            .eq("username", new_username)
+                            .limit(1)
+                            .execute()
+                            .data
+                        )
+
+                        if existing:
+                            st.error("Такой логин уже существует.")
+
+                        else:
+                            password_hash = hashlib.sha256(
+                                new_password.encode()
+                            ).hexdigest()
+
+                            client.table("employees").insert({
+                                "username": new_username,
+                                "full_name": full_name,
+                                "role": "employee",
+                                "active": True,
+                                "password_hash": password_hash
+                            }).execute()
+
+                            st.success(
+                                f"Сотрудник {full_name} успешно создан!"
+                            )
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(
+                            f"Не удалось создать сотрудника: "
+                            f"{type(e).__name__}: {e}"
+                        )
+
+        st.markdown("#### Список сотрудников")
+
+        if not emp_df.empty:
+            display_emp = emp_df.copy()
+
+            display_emp = display_emp.rename(columns={
+                "username": "Логин",
+                "full_name": "ФИО",
+                "role": "Роль",
+                "active": "Активен"
+            })
+
+            if "Активен" in display_emp.columns:
+                display_emp["Активен"] = display_emp["Активен"].map({
+                    True: "Да",
+                    False: "Нет"
+                })
+
+            st.dataframe(
+                display_emp,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Сотрудников пока нет.")
+
+    # -------------------------
+    # УСПЕВАЕМОСТЬ
+    # -------------------------
+    with tab2:
+        st.markdown("### Результаты обучения")
+
+        if not df.empty:
+            if "mode" in df.columns and "points" in df.columns:
+                mode_df = (
+                    df.groupby(["username", "mode"], as_index=False)["points"]
+                    .sum()
+                    .sort_values("points", ascending=False)
+                )
+
+                mode_df = mode_df.rename(columns={
+                    "username": "Логин",
+                    "mode": "Режим обучения",
+                    "points": "Баллы"
+                })
+
+                st.markdown("#### Баллы по каждому режиму")
+
+                st.dataframe(
+                    mode_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            st.markdown("#### Последние действия")
+
+            recent = df.copy()
+
+            columns_to_show = [
+                col for col in [
+                    "created_at",
+                    "username",
+                    "mode",
+                    "points",
+                    "details"
+                ]
+                if col in recent.columns
+            ]
+
+            recent = recent[columns_to_show]
+
+            recent = recent.rename(columns={
+                "created_at": "Дата",
+                "username": "Сотрудник",
+                "mode": "Режим",
+                "points": "Баллы",
+                "details": "Подробности"
+            })
+
+            st.dataframe(
+                recent,
+                use_container_width=True,
+                hide_index=True
+            )
+
+        else:
+            st.info("Пока нет результатов обучения.")
+
+    # -------------------------
+    # РЕЙТИНГ
+    # -------------------------
+    with tab3:
+        st.markdown("### Рейтинг сотрудников")
+
+        if not df.empty and "username" in df.columns and "points" in df.columns:
+            rating = (
+                df.groupby("username", as_index=False)["points"]
+                .sum()
+                .sort_values("points", ascending=False)
+                .reset_index(drop=True)
+            )
+
+            rating.insert(
+                0,
+                "Место",
+                range(1, len(rating) + 1)
+            )
+
+            rating = rating.rename(columns={
+                "username": "Логин",
+                "points": "Всего баллов"
+            })
+
+            st.dataframe(
+                rating,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Рейтинг появится после первых занятий.")
