@@ -448,11 +448,12 @@ elif page == "Сравнение":
         st.info(f"Дороже: {car_title(a if a.price>b.price else b)}")
         record_event(user["username"],"Сравнение",5,"Сравнение цен")
 
+
 elif page == "Экзамен":
     st.subheader("Экзамен отдела продаж")
 
     n = st.slider(
-        "Количество вопросов",
+        "Количество автомобилей",
         5,
         min(30, len(cars) * 3),
         min(20, max(5, len(cars)))
@@ -464,16 +465,19 @@ elif page == "Экзамен":
         ]
         st.session_state.exam_i = 0
         st.session_state.exam_score = 0
+        st.session_state.exam_checked = False
+        st.session_state.exam_results = {}
 
     if "exam" in st.session_state:
         pos = st.session_state.exam_i
+        total = len(st.session_state.exam)
 
-        if pos < len(st.session_state.exam):
+        if pos < total:
             car = cars.iloc[st.session_state.exam[pos]].to_dict()
 
             st.progress(
-                pos / len(st.session_state.exam),
-                text=f"Вопрос {pos + 1}/{len(st.session_state.exam)}"
+                pos / total,
+                text=f"Автомобиль {pos + 1} из {total}"
             )
 
             show_car_card(
@@ -484,83 +488,143 @@ elif page == "Экзамен":
 
             fields = [
                 "year",
+                "price",
+                "mileage",
                 "engine",
                 "transmission",
                 "fuel",
-                "drive",
-                "mileage"
+                "drive"
             ]
 
-            field_labels = {
+            labels = {
                 "year": "Год выпуска",
+                "price": "Цена",
+                "mileage": "Пробег, км",
                 "engine": "Двигатель",
                 "transmission": "Коробка передач",
                 "fuel": "Топливо",
-                "drive": "Привод",
-                "mileage": "Пробег"
+                "drive": "Привод"
             }
 
             available_fields = [
-                field for field in fields
-                if field in cars.columns
-                and cars[field].notna().any()
-                and pd.notna(car.get(field))
+                f for f in fields
+                if f in cars.columns
+                and cars[f].notna().any()
+                and pd.notna(car.get(f))
             ]
 
-            field = st.selectbox(
-                "Какую характеристику определить?",
-                available_fields,
-                format_func=lambda x: field_labels[x],
-                key=f"exam_f{pos}"
-            )
+            if "exam_checked" not in st.session_state:
+                st.session_state.exam_checked = False
 
-            vals = cars[field].dropna().unique().tolist()
+            answers = {}
 
-            if field == "year":
-                vals = sorted(vals, key=lambda x: int(x))
-            elif field == "mileage":
-                vals = sorted(vals, key=lambda x: float(x))
-            else:
-                vals = sorted(vals, key=lambda x: str(x).lower())
+            st.markdown("### Укажите характеристики автомобиля")
 
-            answer = st.selectbox(
-                "Выберите ответ",
-                vals,
-                key=f"exam_a{pos}"
-            )
+            for field in available_fields:
+                vals = cars[field].dropna().unique().tolist()
 
-            if st.button("Ответить", key=f"exam_submit{pos}"):
-                if str(answer) == str(car.get(field)):
-                    st.session_state.exam_score += 1
-                    st.success("Верно!")
+                if field in ["year", "price", "mileage"]:
+                    vals = sorted(vals, key=lambda x: float(x))
                 else:
-                    st.error(
-                        f"Неверно. Правильный ответ: {car.get(field)}"
-                    )
+                    vals = sorted(vals, key=lambda x: str(x).lower())
 
-                st.session_state.exam_i += 1
-                st.rerun()
+                if field == "price":
+                    display = lambda x: money(x)
+                elif field == "mileage":
+                    display = lambda x: f"{int(x):,} км".replace(",", " ")
+                else:
+                    display = lambda x: str(x)
+
+                answers[field] = st.selectbox(
+                    labels[field],
+                    vals,
+                    format_func=display,
+                    key=f"exam_answer_{pos}_{field}",
+                    disabled=st.session_state.exam_checked
+                )
+
+            if not st.session_state.exam_checked:
+                if st.button("Проверить ответы", type="primary"):
+                    results = {}
+
+                    for field in available_fields:
+                        correct = str(answers[field]) == str(car.get(field))
+                        results[field] = {
+                            "correct": correct,
+                            "answer": answers[field],
+                            "right": car.get(field)
+                        }
+
+                        if correct:
+                            st.session_state.exam_score += 1
+
+                    st.session_state.exam_results = results
+                    st.session_state.exam_checked = True
+                    st.rerun()
+
+            else:
+                st.markdown("### Результат проверки")
+
+                results = st.session_state.exam_results
+
+                for field in available_fields:
+                    result = results[field]
+
+                    if field == "price":
+                        answer_text = money(result["answer"])
+                        right_text = money(result["right"])
+                    elif field == "mileage":
+                        answer_text = f"{int(result['answer']):,} км".replace(",", " ")
+                        right_text = f"{int(result['right']):,} км".replace(",", " ")
+                    else:
+                        answer_text = str(result["answer"])
+                        right_text = str(result["right"])
+
+                    if result["correct"]:
+                        st.success(
+                            f"{labels[field]}: {answer_text} — верно"
+                        )
+                    else:
+                        st.error(
+                            f"{labels[field]}: ваш ответ — {answer_text}. "
+                            f"Правильно: {right_text}"
+                        )
+
+                correct_count = sum(
+                    1 for r in results.values() if r["correct"]
+                )
+
+                st.write(
+                    f"Правильно: **{correct_count} из {len(available_fields)}**"
+                )
+
+                if st.button("Следующий автомобиль", type="primary"):
+                    st.session_state.exam_i += 1
+                    st.session_state.exam_checked = False
+                    st.session_state.exam_results = {}
+                    st.rerun()
 
         else:
-            total = len(st.session_state.exam)
             correct = st.session_state.exam_score
             points = correct * 10
 
             st.success(
-                f"Экзамен завершён: {correct}/{total}. Баллы: {points}"
+                f"Экзамен завершён! Правильных ответов: "
+                f"{correct}. Баллы: {points}"
             )
 
             record_event(
                 user["username"],
                 "Экзамен",
                 points,
-                f"{correct}/{total}"
+                f"{correct} правильных ответов"
             )
 
             del st.session_state.exam
 
             if st.button("Пройти ещё раз"):
                 st.rerun()
+
 
 
 elif page == "Мой прогресс":
