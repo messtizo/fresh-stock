@@ -93,25 +93,51 @@ def money(v):
     try: return f"{int(float(v)):,}".replace(",", " ") + " ₽"
     except Exception: return "Цена не указана"
 
-def show_car_card(car, compact=False):
-    title = f"{car.get('brand','')} {car.get('model','')}".strip() or car.get("title","Автомобиль")
+
+def show_car_card(car, compact=False, show_specs=True):
+    brand = str(car.get("brand") or "").strip()
+    model = str(car.get("model") or "").strip()
+    title = f"{brand} {model}".strip()
+
+    if not title or title.lower() == "none":
+        title = str(car.get("title") or "Автомобиль").strip()
+
+    title = title.replace("None", "").strip()
+
     image_url = car.get("image_url") or car.get("photo_url")
+
     with st.container(border=True):
         if image_url:
             st.image(image_url, use_container_width=True)
-        st.markdown(f"**{title} · {car.get('year','—')}**")
+
+        year = car.get("year")
+        year_text = str(int(year)) if pd.notna(year) else ""
+
+        st.markdown(f"**{title} · {year_text}**")
         st.markdown(f"### {money(car.get('price'))}")
-        specs = [
-            f"{int(car['mileage']):,} км".replace(",", " ") if pd.notna(car.get("mileage")) else "Пробег —",
-            str(car.get("engine") or "Двигатель —"),
-            str(car.get("transmission") or "КПП —"),
-            f"{car.get('power')} л.с." if car.get("power") else "Мощность —",
-            str(car.get("fuel") or "Топливо —"),
-            str(car.get("drive") or "Привод —"),
-        ]
-        st.caption(" · ".join(specs))
+
+        if show_specs:
+            specs = [
+                f"{int(car['mileage']):,} км".replace(",", " ") if pd.notna(car.get("mileage")) else None,
+                str(car.get("engine")) if car.get("engine") else None,
+                str(car.get("transmission")) if car.get("transmission") else None,
+                f"{car.get('power')} л.с." if car.get("power") else None,
+                str(car.get("fuel")) if car.get("fuel") else None,
+                str(car.get("drive")) if car.get("drive") else None,
+            ]
+
+            specs = [s for s in specs if s and s.lower() not in ["none", "null"]]
+
+            if specs:
+                st.caption(" · ".join(specs))
+
         if car.get("url"):
-            st.link_button("Открыть объявление Fresh", car["url"], use_container_width=True)
+            st.link_button(
+                "Открыть объявление Fresh",
+                car["url"],
+                use_container_width=True
+            )
+
 
 def require_login():
     if "user" not in st.session_state:
@@ -257,7 +283,7 @@ elif page == "Флеш-карточки":
     car = cars.iloc[idx].to_dict()
 
     # Фото и основная информация
-    show_car_card(car)
+    show_car_card(car, show_specs=False)
 
     st.divider()
 
